@@ -1,0 +1,6 @@
+{
+  "name": "GroundTruth",
+  "description": "The web, queried like a database. Autonomous dual-agent web intelligence with real-time arbitration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
