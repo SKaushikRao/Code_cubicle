@@ -1,4 +1,4 @@
-# GroundTruth — “The web, queried like a database.”
+# Vikaas AI — “The web, queried like Never Before”
 
 > Built for the Code Cubicle 6.0 problem statement: **“AI-Powered Intelligence for the Real World.”**
 > **Core Promise:** *“Two agents investigate. One arbiter verifies. GroundTruth shows you how it knows.”*
