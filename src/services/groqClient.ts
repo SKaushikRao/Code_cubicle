@@ -1,5 +1,5 @@
 /**
- * GroundTruth - Groq AI Inference Client
+ * Vikaas AI - Groq AI Inference Client
  * Handles structured JSON completion with model fallbacks and schema validation.
  */
 import Groq from 'groq-sdk';
@@ -7,6 +7,7 @@ import { z } from 'zod';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.local' });
+dotenv.config({ path: '.env' });
 dotenv.config();
 
 export const MODEL_CONFIG = {
@@ -60,7 +61,7 @@ export async function callGroqStructured<T>(params: {
     const parsed = parseAndValidate(rawResult, params.schema);
     return { data: parsed, modelUsed: primaryModel, isFallback: false };
   } catch (primaryError: any) {
-    console.warn(`[GroqClient] Primary model (${primaryModel}) call failed: ${primaryError.message}. Attempting fallback to ${fallbackModel}...`);
+    console.warn(`[VikaasAI GroqClient] Primary model (${primaryModel}) call failed: ${primaryError.message}. Attempting fallback to ${fallbackModel}...`);
     
     // Attempt with fallback model
     try {
@@ -69,7 +70,7 @@ export async function callGroqStructured<T>(params: {
       return { data: parsed, modelUsed: fallbackModel, isFallback: true };
     } catch (fallbackError: any) {
       // One retry with structured correction
-      console.warn(`[GroqClient] Attempting one correction retry with fallback model...`);
+      console.warn(`[VikaasAI GroqClient] Attempting one correction retry with fallback model...`);
       const correctionPrompt = `${params.userPrompt}\n\nIMPORTANT: Return ONLY valid JSON conforming to the requested schema. Ensure all fields are present and properly escaped.`;
       const retryResult = await executeGroqCall(client, fallbackModel, params.systemPrompt, correctionPrompt, 0.2);
       const parsed = parseAndValidate(retryResult, params.schema);

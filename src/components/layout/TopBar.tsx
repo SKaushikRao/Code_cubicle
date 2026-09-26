@@ -1,5 +1,5 @@
 /**
- * GroundTruth - Top Navigation Bar
+ * Vikaas AI - Top Navigation Bar
  * Conforms strictly to the 3-zone Top Bar Contract:
  * [Zone 1: Single text element wordmark/breadcrumb] - [Zone 2: 4-6 clean single-line nav tabs] - [Zone 3: 1-2 primary actions]
  */
@@ -32,7 +32,7 @@ export function TopBar({ activeTab, onChangeTab, isDemoMode, hasResults, onExpor
       {/* Zone 1: Single Wordmark / Breadcrumb */}
       <div className="flex items-center gap-2">
         <a href="/" className="text-sm font-bold tracking-tight text-neutral-100 hover:text-cyan-400 transition-colors">
-          GroundTruth
+          Vikaas AI
         </a>
         <span className="text-neutral-600">/</span>
         <span className="text-xs text-neutral-400 font-mono">

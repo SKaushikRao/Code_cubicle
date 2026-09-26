@@ -1,7 +1,7 @@
 /**
- * GroundTruth - "The web, queried like a database."
- * Problem Statement: Code Cubicle 6.0: "AI-Powered Intelligence for the Real World"
- * Core Promise: "Two agents investigate. One arbiter verifies. GroundTruth shows you how it knows."
+ * Vikaas AI - "Real Development starts with the most reliable data."
+ * Made for Code Cubicle 6.0
+ * Core Promise: "Two agents investigate. One arbiter verifies. Vikaas AI shows you how it knows."
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -108,7 +108,7 @@ export default function App() {
 
   // Client-side autonomous research execution fallback
   const runClientFallback = (query: string, sessionId: string) => {
-    console.log('[GroundTruth] Running autonomous client-side research fallback for:', query);
+    console.log('[Vikaas AI] Running autonomous client-side research fallback for:', query);
     const data = generateClientFallbackResearch(query);
 
     const emit = (evt: ResearchEvent) => {
@@ -260,7 +260,7 @@ export default function App() {
         timestamp: new Date().toISOString(),
         type: 'planner_started',
         agent: 'planner',
-        message: `Dispatching GroundTruth autonomous research orchestrator for "${finalQuery}"`,
+        message: `Dispatching Vikaas AI autonomous research orchestrator for "${finalQuery}"`,
       }
     ];
 
@@ -406,7 +406,7 @@ export default function App() {
 
       // If SSE failed on connect (e.g. 404 or Vercel buffering), attempt POST /api/research/run
       try {
-        console.log('[GroundTruth] Attempting HTTP POST /api/research/run...');
+        console.log('[Vikaas AI] Attempting HTTP POST /api/research/run...');
         const resp = await fetch('/api/research/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -437,7 +437,7 @@ export default function App() {
           }
         }
       } catch (fetchErr) {
-        console.warn('[GroundTruth] POST /api/research/run unavailable:', fetchErr);
+        console.warn('[Vikaas AI] POST /api/research/run unavailable:', fetchErr);
       }
 
       // If backend is unavailable or 404s, run the autonomous client fallback
@@ -603,10 +603,13 @@ export default function App() {
 
               <div>
                 <h2 className="text-xl font-bold tracking-tight text-neutral-100">
-                  GroundTruth — “The web, queried like a database.”
+                  Vikaas AI — "Real Development starts with the most reliable data."
                 </h2>
+                <p className="text-[10px] text-neutral-500 mt-1">
+                  Made for Code Cubicle 6.0
+                </p>
                 <p className="text-xs text-neutral-400 mt-2 max-w-xl mx-auto leading-relaxed">
-                  Describe the data you need. Two independent agents investigate the web. A research arbiter reconciles their evidence. GroundTruth builds the dashboard.
+                  Describe the data you need. Two independent agents investigate the web. A research arbiter reconciles their evidence. GroundTruthth builds the dashboard.
                 </p>
               </div>
 

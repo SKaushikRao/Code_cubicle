@@ -1,6 +1,6 @@
 /**
- * GroundTruth - Left Navigation & Session Sidebar
- * Product Identity: GroundTruth - "The web, queried like a database."
+ * Vikaas AI - Left Navigation & Session Sidebar
+ * Product Identity: Vikaas AI - "Real Development starts with the most reliable data."
  */
 import React from 'react';
 import { 
@@ -62,11 +62,11 @@ export function Sidebar({
               <ShieldCheck className="w-4 h-4 text-white" />
             </div>
             <h1 className="text-base font-bold text-neutral-100 tracking-tight">
-              GroundTruth
+              Vikaas AI
             </h1>
           </div>
           <p className="text-[11px] text-neutral-400 font-mono tracking-tight pl-9.5">
-            The web, queried like a database.
+            Real Development starts with the most reliable data.
           </p>
         </div>
 

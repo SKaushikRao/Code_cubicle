@@ -1,13 +1,13 @@
-# GroundTruth — “The web, queried like a database.”
+# Vikaas AI — "Real Development starts with the most reliable data."
 
-> Built for the Code Cubicle 6.0 problem statement: **“AI-Powered Intelligence for the Real World.”**
-> **Core Promise:** *“Two agents investigate. One arbiter verifies. GroundTruth shows you how it knows.”*
+> Made for Code Cubicle 6.0
+> **Core Promise:** *"Two agents investigate. One arbiter verifies. Vikaas AI shows you how it knows."*
 
 ---
 
 ## Overview
 
-**GroundTruth** is an autonomous, visually transparent web-intelligence platform. Instead of a conversational chatbot or a static scraper, GroundTruth deploys a multi-agent verification system that transforms live web exploration into a structured, audit-ready database.
+**Vikaas AI** is an autonomous, visually transparent web-intelligence platform. Instead of a conversational chatbot or a static scraper, Vikaas AI deploys a multi-agent verification system that transforms live web exploration into a structured, audit-ready database.
 
 When a user submits a natural-language research request:
 1. **Research Planner:** Synthesizes a structured specification detailing target entities, geographic bounds, audited fields, dual search strategies, and confidence thresholds.
@@ -27,7 +27,7 @@ When a user submits a natural-language research request:
 - **Agent Comparison Matrix:** Side-by-side claim reconciliation highlighting consensus (green) and conflicting evidence (amber/red).
 - **Server-Side Security:** Zero API keys in client-side bundles. Groq model inference and web scraping execute inside a thin server layer with Server-Sent Events (SSE).
 - **Strict In-Memory Discipline:** No databases (no SQLite, MongoDB, Firebase, or Redis). Clicking `+ New Research` purges state for a clean session.
-- **Graceful Showcase Fallback:** If `GROQ_API_KEY` is not yet configured, GroundTruth operates in an authentic Showcase Mode with verifiable real-world data and real-time streaming, clearly labeled in the UI.
+- **Graceful Showcase Fallback:** If `GROQ_API_KEY` is not yet configured, Vikaas AI operates in an authentic Showcase Mode with verifiable real-world data and real-time streaming, clearly labeled in the UI.
 
 ---
 

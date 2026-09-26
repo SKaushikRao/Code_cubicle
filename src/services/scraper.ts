@@ -1,5 +1,5 @@
 /**
- * GroundTruth - Live Web Scraper Engine
+ * Vikaas AI - Live Web Scraper Engine
  * Uses server-side fetch with Cheerio HTML extraction, timeouts, and safe error handling.
  */
 import * as cheerio from 'cheerio';
@@ -72,7 +72,7 @@ export async function scrapeUrl(targetUrl: string, timeoutMs = 6000): Promise<Sc
     const response = await fetch(normalizedUrl, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; GroundTruth-WebIntelligenceBot/1.0; +https://groundtruth.local/bot)',
+        'User-Agent': 'Mozilla/5.0 (compatible; VikaasAI-WebIntelligenceBot/1.0; +https://vikaas.local/bot)',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
       },

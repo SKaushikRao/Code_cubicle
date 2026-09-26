@@ -1,5 +1,5 @@
 /**
- * GroundTruth - Live Web Search Abstraction
+ * Vikaas AI - Live Web Search Abstraction
  * Performs live web queries to find authentic URLs, titles, and page snippets without requiring paid search APIs.
  * Supports multi-provider fallback (DuckDuckGo, Wikipedia API, and Canonical Web Index) so queries always return live, scrapable web sources.
  */

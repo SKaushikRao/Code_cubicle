@@ -1,5 +1,5 @@
 /**
- * GroundTruth - Full-Stack Server Entry Point
+ * Vikaas AI - Full-Stack Server Entry Point
  * Runs on Port 3000 as required by the runtime environment.
  */
 import path from 'path';
@@ -30,10 +30,10 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[GroundTruth Engine] Server running on http://0.0.0.0:${PORT}`);
+    console.log(`[Vikaas AI Engine] Server running on http://0.0.0.0:${PORT}`);
   });
 }
 
 startServer().catch((err) => {
-  console.error('[GroundTruth Engine] Server start failure:', err);
+  console.error('[Vikaas AI Engine] Server start failure:', err);
 });

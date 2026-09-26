@@ -1,5 +1,5 @@
 /**
- * GroundTruth - Client-Side Resilience Fallback
+ * Vikaas AI - Client-Side Resilience Fallback
  * Provides instant autonomous research execution when serverless functions or proxies fail or 404.
  */
 import { ResearchEvent, ResearchPlan, DiscoveredSource, DiscoveredEntity, ConflictItem, DashboardSpec } from '../types/research';
@@ -581,7 +581,7 @@ export function generateClientFallbackResearch(query: string): ClientFallbackRes
 
   const dashboardSpec: DashboardSpec = {
     headline: `Verified Intelligence Report: ${title}`,
-    summary: `Structured multi-agent findings for "${query}". Reconciled by GroundTruth Research Arbiter with verified evidentiary citations.`,
+    summary: `Structured multi-agent findings for "${query}". Reconciled by Vikaas AI Research Arbiter with verified evidentiary citations.`,
     metrics: [
       { label: 'Audited Records', value: 1, description: 'Verified target entities', tone: 'positive' },
       { label: 'Evidence Coverage', value: '100%', description: 'Field-by-field grounding', tone: 'positive' },

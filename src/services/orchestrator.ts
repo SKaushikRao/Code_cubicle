@@ -1,6 +1,6 @@
 /**
- * GroundTruth - Agentic Research Orchestrator
- * Problem Statement: Code Cubicle 6.0: "AI-Powered Intelligence for the Real World"
+ * Vikaas AI - Agentic Research Orchestrator
+ * Made for Code Cubicle 6.0
  * 
  * Pipeline:
  * USER REQUEST -> PLANNER -> EXPLORER & INVESTIGATOR (Parallel) -> CONFLICT DETECTION -> ARBITER (with ESCALATION) -> VISUALIZER
@@ -78,7 +78,7 @@ export class ResearchOrchestrator {
     if (!hasGroq) {
       this.emit(
         'planner_started', 
-        'No GROQ_API_KEY detected in server environment. Initiating GroundTruth Guided Demonstration Mode with authentic verifiable web evidence.', 
+        'No GROQ_API_KEY detected in server environment. Initiating Vikaas AI Guided Demonstration Mode with authentic verifiable web evidence.', 
         'planner',
         { mode: 'DEMO' }
       );
@@ -91,7 +91,7 @@ export class ResearchOrchestrator {
       // ==========================================
       this.emit('planner_started', `Analyzing user query: "${userQuery}"`, 'planner');
 
-      const planSystemPrompt = `You are the Research Planner for GroundTruth, an autonomous web intelligence system.
+      const planSystemPrompt = `You are the Research Planner for Vikaas AI, an autonomous web intelligence system.
 Convert the user request into a strict structured research specification.
 Break down target entities, geography, required fields, and distinct search strategies for two independent agents.
 CRITICAL:
@@ -283,7 +283,7 @@ Output the structured research specification.`;
       }
 
       // Run Arbiter LLM evaluation
-      const arbiterSystemPrompt = `You are the Research Arbiter for GroundTruth.
+      const arbiterSystemPrompt = `You are the Research Arbiter for Vikaas AI.
 You judge claims collected by Explorer and Investigator agents according to an explicit deterministic framework:
 1. Source Authority: Official gov/primary company > industry media > aggregator > unverified.
 2. Freshness: Newer evidence takes precedence when sources are comparable.
@@ -397,7 +397,7 @@ Conflicts Tracked: ${JSON.stringify(initialConflicts)}`;
       // ==========================================
       this.emit('visualizer_started', 'Dashboard Generator: Constructing adaptive evidence widgets from validated dataset', 'visualizer');
 
-      const dashboardPrompt = `You are the Dashboard Visualizer for GroundTruth.
+      const dashboardPrompt = `You are the Dashboard Visualizer for Vikaas AI.
 Generate a strict JSON dashboard specification for this verified dataset.
 CRITICAL RULES:
 - Only generate metrics, charts, and table columns based on ACTUAL fields present in the data.
@@ -453,7 +453,7 @@ Total Sources: ${allSources.length}`;
       };
     } catch (err: any) {
       console.error('[ResearchOrchestrator] Execution failed, falling back to clean demonstration dataset:', err);
-      this.emit('research_error', `Live Groq execution encountered an error: ${err.message}. Seamlessly transitioning to GroundTruth Verified Showcase Mode.`, 'arbiter');
+      this.emit('research_error', `Live Groq execution encountered an error: ${err.message}. Seamlessly transitioning to Vikaas AI Verified Showcase Mode.`, 'arbiter');
       return this.runDemonstrationPipeline(userQuery);
     }
   }
@@ -497,7 +497,7 @@ Total Sources: ${allSources.length}`;
 
     const snippetsSummary = searchSnippets.map((s, i) => `[Result ${i+1}] Title: ${s.title}\nURL: ${s.url}\nSummary: ${s.snippet}`).join('\n\n');
 
-    const explorerPrompt = `You are the Explorer Agent for GroundTruth, an autonomous web intelligence system.
+    const explorerPrompt = `You are the Explorer Agent for Vikaas AI, an autonomous web intelligence system.
 Your role: Breadth and discovery. Extract candidate entities and required fields from the research plan and the real live web evidence provided below.
 Extract all distinct entities mentioned in the live web search results and scraped pages.
 Every extracted field must be backed by a sourceUrl and supportingSnippet from the evidence.
@@ -582,7 +582,7 @@ ${scrapedContext || 'No additional scraped text retrieved.'}`;
 
     const snippetsSummary = searchSnippets.map((s, i) => `[Official Result ${i+1}] Title: ${s.title}\nURL: ${s.url}\nSummary: ${s.snippet}`).join('\n\n');
 
-    const investigatorPrompt = `You are the Investigator Agent for GroundTruth.
+    const investigatorPrompt = `You are the Investigator Agent for Vikaas AI.
 Your role: Independent verification and adversarial research. Challenge claims, check for outdated pricing or launch dates, identify missing fields, prioritize primary/official sources.
 Extract confirmed field values and any counter-evidence directly from the live web evidence provided below.
 You must return a single JSON object with the format:
