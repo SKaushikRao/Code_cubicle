@@ -51,6 +51,8 @@ export async function callGroqStructured<T>(params: {
     throw new Error('GROQ_API_KEY is not configured in process.env');
   }
 
+  console.log('[VikaasAI GroqClient] Attempting Groq API call with key:', getGroqApiKey().substring(0, 10) + '...');
+
   const primaryModel = params.preferredModel || MODEL_CONFIG.HEAVY;
   const isLightweight = primaryModel === MODEL_CONFIG.LIGHT;
   const fallbackModel = isLightweight ? MODEL_CONFIG.FALLBACK_LIGHT : MODEL_CONFIG.FALLBACK_HEAVY;
