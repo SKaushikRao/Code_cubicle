@@ -594,60 +594,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Initial Welcome & Value Proposition (When Idle) */}
-          {state.status === 'idle' && (
-            <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-2xl p-8 backdrop-blur-md text-center max-w-3xl mx-auto my-6 space-y-5">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-600 to-indigo-600 flex items-center justify-center mx-auto shadow-[0_0_30px_rgba(6,182,212,0.3)]">
-                <ShieldCheck className="w-6 h-6 text-white" />
-              </div>
-
-              <div>
-                <h2 className="text-xl font-bold tracking-tight text-neutral-100">
-                  Vikaas AI — "Real Development starts with the most reliable data."
-                </h2>
-                <p className="text-[10px] text-neutral-500 mt-1">
-                  Made for Code Cubicle 6.0
-                </p>
-                <p className="text-xs text-neutral-400 mt-2 max-w-xl mx-auto leading-relaxed">
-                  Describe the data you need. Two independent agents investigate the web. A research arbiter reconciles their evidence. GroundTruthth builds the dashboard.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-left pt-2">
-                <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800/80 space-y-1">
-                  <div className="flex items-center gap-2 text-cyan-400 font-semibold text-xs font-mono">
-                    <span>01. Explorer Agent</span>
-                  </div>
-                  <p className="text-[11px] text-neutral-400">
-                    Broad live web crawler discovering candidate entities, directory listings, and raw sources.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800/80 space-y-1">
-                  <div className="flex items-center gap-2 text-indigo-400 font-semibold text-xs font-mono">
-                    <span>02. Investigator Agent</span>
-                  </div>
-                  <p className="text-[11px] text-neutral-400">
-                    Adversarial validator auditing official government gazettes, regulatory orders, and primary portals.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800/80 space-y-1">
-                  <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs font-mono">
-                    <span>03. Research Arbiter</span>
-                  </div>
-                  <p className="text-[11px] text-neutral-400">
-                    Reconciles conflicting claims, triggers targeted escalation search, and eliminates hallucinations.
-                  </p>
-                </div>
-              </div>
-
-              <div className="pt-2 text-xs text-neutral-400 flex items-center justify-center gap-2">
-                <span>Try an inquiry above or select an example from the sidebar.</span>
-              </div>
-            </div>
-          )}
-
           {/* Research Plan Display (if available) */}
           {state.plan && <PlanDisplay plan={state.plan} />}
 
@@ -705,6 +651,60 @@ export default function App() {
                 setInspectorOpen(true);
               }}
             />
+          )}
+
+          {/* Initial Welcome & Value Proposition (When Idle) */}
+          {state.status === 'idle' && (
+            <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-2xl p-8 backdrop-blur-md text-center max-w-3xl mx-auto my-6 space-y-5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-600 to-indigo-600 flex items-center justify-center mx-auto shadow-[0_0_30px_rgba(6,182,212,0.3)]">
+                <ShieldCheck className="w-6 h-6 text-white" />
+              </div>
+
+              <div>
+                <h2 className="text-xl font-bold tracking-tight text-neutral-100">
+                  Vikaas AI — "Real Development starts with the most reliable data."
+                </h2>
+                <p className="text-[10px] text-neutral-500 mt-1">
+                  Made for Code Cubicle 6.0
+                </p>
+                <p className="text-xs text-neutral-400 mt-2 max-w-xl mx-auto leading-relaxed">
+                  Describe the data you need. Two independent agents investigate the web. A research arbiter reconciles their evidence. Vikaas AI builds the dashboard.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-left pt-2">
+                <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800/80 space-y-1">
+                  <div className="flex items-center gap-2 text-cyan-400 font-semibold text-xs font-mono">
+                    <span>01. Explorer Agent</span>
+                  </div>
+                  <p className="text-[11px] text-neutral-400">
+                    Broad live web crawler discovering candidate entities, directory listings, and raw sources.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800/80 space-y-1">
+                  <div className="flex items-center gap-2 text-indigo-400 font-semibold text-xs font-mono">
+                    <span>02. Investigator Agent</span>
+                  </div>
+                  <p className="text-[11px] text-neutral-400">
+                    Adversarial validator auditing official government gazettes, regulatory orders, and primary portals.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800/80 space-y-1">
+                  <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs font-mono">
+                    <span>03. Research Arbiter</span>
+                  </div>
+                  <p className="text-[11px] text-neutral-400">
+                    Reconciles conflicting claims, triggers targeted escalation search, and eliminates hallucinations.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2 text-xs text-neutral-400 flex items-center justify-center gap-2">
+                <span>Try an inquiry above or select an example from the sidebar.</span>
+              </div>
+            </div>
           )}
 
           {activeTab === 'compare' && (

@@ -98,13 +98,14 @@ CRITICAL:
 - searchStrategies.explorerFocus MUST be concise search engine keywords (3 to 6 words each), e.g. ["EV charging companies Rajasthan", "Jaipur EV charging stations list", "Rajasthan CPO operators"].
 - searchStrategies.investigatorFocus MUST be targeted verification keywords, e.g. ["Rajasthan EV charging tariff official", "BEE EV charging stations registry", "Rajasthan discom EV policy"].
 - Do NOT output sentences like "Search for..." or "Query...".
+- sourcePreferences should include diverse sources: manufacturer websites, review sites, news articles, blogs, forums, and government sites - not just official sources.
 You must return a single JSON object with keys:
 - "objective": string
 - "targetEntitiesDescription": string
 - "geographyScope": string
 - "requiredFields": string[] (at least 2 specific fields to extract)
 - "searchStrategies": { "explorerFocus": string[], "investigatorFocus": string[] }
-- "sourcePreferences": string[]
+- "sourcePreferences": string[] (include diverse sources: manufacturer sites, review sites, news, blogs, forums, government)
 - "verificationRequirements": string[]
 - "freshnessRequirements": string
 - "expectedOutputFormat": string
@@ -122,6 +123,7 @@ Output the structured research specification.`;
         preferredModel: MODEL_CONFIG.LIGHT,
       });
 
+      console.log('[ResearchOrchestrator] Plan generated:', JSON.stringify(plan, null, 2));
       this.emit('planner_completed', `Plan finalized: Target scope "${plan.geographyScope}", tracking [${plan.requiredFields.join(', ')}]`, 'planner', { plan });
 
       const allSources: DiscoveredSource[] = [];
@@ -398,11 +400,13 @@ Conflicts Tracked: ${JSON.stringify(initialConflicts)}`;
       this.emit('visualizer_started', 'Dashboard Generator: Constructing adaptive evidence widgets from validated dataset', 'visualizer');
 
       const dashboardPrompt = `You are the Dashboard Visualizer for Vikaas AI.
-Generate a strict JSON dashboard specification for this verified dataset.
+Generate a strict JSON dashboard specification for this dataset (includes both verified and unverified data).
 CRITICAL RULES:
-- Only generate metrics, charts, and table columns based on ACTUAL fields present in the data.
-- Never invent numbers or hallucinate metrics.
+- Generate metrics, charts, and table columns based on ALL fields present in the data (verified and unverified).
+- Show unverified data with appropriate indicators - do not hide it.
+- Always include source URLs for all data points.
 - Keep titles professional and clean.
+- If data is unverified, mark it clearly but still display it.
 You must return a single JSON object with the format:
 {
   "headline": "string",
@@ -429,8 +433,12 @@ You must return a single JSON object with the format:
 Do not output markdown or text outside the JSON object.`;
 
       const dashboardUserPrompt = `Verified Entities: ${JSON.stringify(finalEntities.slice(0, 15))}
+All Claims: ${JSON.stringify(allClaims.slice(0, 30))}
 Conflicts Resolved: ${JSON.stringify(initialConflicts)}
-Total Sources: ${allSources.length}`;
+Total Sources: ${allSources.length}
+Research Request: "${userQuery}"
+
+IMPORTANT: Generate a dashboard that displays ALL data found - both verified and unverified. Create table columns for all fields present in the entities. Include source URLs in the table data. If data is unverified, still display it but mark it appropriately.`;
 
       const { data: dashboardSpec } = await callGroqStructured({
         systemPrompt: dashboardPrompt,
@@ -453,6 +461,7 @@ Total Sources: ${allSources.length}`;
       };
     } catch (err: any) {
       console.error('[ResearchOrchestrator] Execution failed, falling back to clean demonstration dataset:', err);
+      console.error('[ResearchOrchestrator] Error details:', JSON.stringify(err, null, 2));
       this.emit('research_error', `Live Groq execution encountered an error: ${err.message}. Seamlessly transitioning to Vikaas AI Verified Showcase Mode.`, 'arbiter');
       return this.runDemonstrationPipeline(userQuery);
     }
