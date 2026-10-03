@@ -5,27 +5,27 @@
  * Pipeline:
  * USER REQUEST -> PLANNER -> EXPLORER & INVESTIGATOR (Parallel) -> CONFLICT DETECTION -> ARBITER (with ESCALATION) -> VISUALIZER
  */
-import { 
-  ResearchPlan, 
-  DiscoveredSource, 
-  ExtractedClaim, 
-  DiscoveredEntity, 
-  ConflictItem, 
-  DashboardSpec, 
-  ResearchEvent, 
+import {
+  ResearchPlan,
+  DiscoveredSource,
+  ExtractedClaim,
+  DiscoveredEntity,
+  ConflictItem,
+  DashboardSpec,
+  ResearchEvent,
   ResearchEventType,
   SourceAuthority,
   ArbiterResolution,
   ClaimVerificationStatus
 } from '../types/research';
-import { 
-  ResearchPlanSchema, 
-  ExplorerOutputSchema, 
-  InvestigatorOutputSchema, 
-  ArbiterBatchOutputSchema, 
-  DashboardSpecSchema 
+import {
+  ResearchPlanSchema,
+  ExplorerOutputSchema,
+  InvestigatorOutputSchema,
+  ArbiterBatchOutputSchema,
+  DashboardSpecSchema
 } from './schemas';
-import { callGroqStructured, isGroqConfigured, MODEL_CONFIG } from './groqClient';
+import { callGroqStructured, isAnyProviderConfigured, MODEL_CONFIG } from './groqClient';
 import { searchLiveWeb, buildSourceFromSearch } from './webSearch';
 import { scrapeUrl, classifyAuthority } from './scraper';
 
@@ -73,12 +73,12 @@ export class ResearchOrchestrator {
     dashboardSpec: DashboardSpec;
     isDemoMode: boolean;
   }> {
-    const hasGroq = isGroqConfigured();
+    const hasProvider = isAnyProviderConfigured();
 
-    if (!hasGroq) {
+    if (!hasProvider) {
       this.emit(
-        'planner_started', 
-        'No GROQ_API_KEY detected in server environment. Initiating Vikaas AI Guided Demonstration Mode with authentic verifiable web evidence.', 
+        'planner_started',
+        'No AI provider API key detected (GROQ_API_KEY or OPENROUTER_API_KEY). Initiating Vikaas AI Guided Demonstration Mode with authentic verifiable web evidence.',
         'planner',
         { mode: 'DEMO' }
       );
@@ -120,7 +120,7 @@ Output the structured research specification.`;
         systemPrompt: planSystemPrompt,
         userPrompt: planUserPrompt,
         schema: ResearchPlanSchema,
-        preferredModel: MODEL_CONFIG.LIGHT,
+        preferredModel: MODEL_CONFIG.GROQ_LIGHT,
       });
 
       console.log('[ResearchOrchestrator] Plan generated:', JSON.stringify(plan, null, 2));
@@ -264,14 +264,14 @@ Output the structured research specification.`;
       }
 
       // If conflicts exist, let Arbiter run targeted escalation search
-      for (const conflict of initialConflicts) {
+      for (const conflict of initialConflicts.slice(0, 2)) {
         this.emit('escalation_started', `Arbiter escalating conflict for ${conflict.entityName} (${conflict.fieldName}): Initiating targeted web verification`, 'arbiter');
-        
+
         const targetedQuery = `"${conflict.entityName}" official ${conflict.fieldName} primary source`;
         conflict.escalatedToWebSearch = true;
         conflict.targetedQuery = targetedQuery;
 
-        const liveResults = await searchLiveWeb(targetedQuery, 2);
+        const liveResults = await searchLiveWeb(targetedQuery, 1);
         if (liveResults.length > 0) {
           const escalatedSrc = buildSourceFromSearch(liveResults[0], 'arbiter');
           if (!sourcesMap.has(escalatedSrc.url)) {
@@ -328,7 +328,7 @@ Conflicts Tracked: ${JSON.stringify(initialConflicts)}`;
         systemPrompt: arbiterSystemPrompt,
         userPrompt: arbiterUserPrompt,
         schema: ArbiterBatchOutputSchema,
-        preferredModel: MODEL_CONFIG.HEAVY,
+        preferredModel: MODEL_CONFIG.GROQ_HEAVY,
       });
 
       // Apply Arbiter decisions to conflicts
@@ -444,7 +444,7 @@ IMPORTANT: Generate a dashboard that displays ALL data found - both verified and
         systemPrompt: dashboardPrompt,
         userPrompt: dashboardUserPrompt,
         schema: DashboardSpecSchema,
-        preferredModel: MODEL_CONFIG.LIGHT,
+        preferredModel: MODEL_CONFIG.GROQ_LIGHT,
       });
 
       this.emit('dashboard_generated', `Dashboard ready with ${dashboardSpec.metrics.length} metrics, ${dashboardSpec.charts.length} charts, and full evidence table`, 'visualizer', { dashboardSpec });
@@ -480,10 +480,10 @@ IMPORTANT: Generate a dashboard that displays ALL data found - both verified and
     const discoveredUrls: string[] = [];
     const searchSnippets: Array<{ title: string; url: string; snippet: string; domain: string }> = [];
 
-    for (const rawQ of plan.searchStrategies.explorerFocus.slice(0, 3)) {
+    for (const rawQ of plan.searchStrategies.explorerFocus.slice(0, 2)) {
       const cleanQ = rawQ.replace(/^["']|["']$/g, '').replace(/^(search\s+for|query|find|explore)\s+/i, '').trim();
       this.emit('search_query', `Explorer searching web: "${cleanQ}"`, 'explorer', { query: cleanQ });
-      const results = await searchLiveWeb(cleanQ, 4);
+      const results = await searchLiveWeb(cleanQ, 3);
       for (const item of results) {
         const src = buildSourceFromSearch(item, 'explorer');
         onSourceFound(src);
@@ -495,11 +495,11 @@ IMPORTANT: Generate a dashboard that displays ALL data found - both verified and
 
     // Scrape discovered pages
     let scrapedContext = '';
-    for (const url of Array.from(new Set(discoveredUrls)).slice(0, 3)) {
+    for (const url of Array.from(new Set(discoveredUrls)).slice(0, 2)) {
       this.emit('scrape_started', `Explorer scraping page: ${url}`, 'explorer', { url });
-      const scraped = await scrapeUrl(url, 4500);
+      const scraped = await scrapeUrl(url, 3000);
       if (scraped.scrapedSuccessfully) {
-        scrapedContext += `\n--- SCRAPED PAGE: ${scraped.title} (${scraped.url}) ---\n${scraped.cleanText.slice(0, 1500)}\n`;
+        scrapedContext += `\n--- SCRAPED PAGE: ${scraped.title} (${scraped.url}) ---\n${scraped.cleanText.slice(0, 1000)}\n`;
         this.emit('scrape_completed', `Explorer scraped ${scraped.wordCount} words from ${scraped.domain}`, 'explorer', { scraped });
       }
     }
@@ -545,7 +545,7 @@ ${scrapedContext || 'No additional scraped text retrieved.'}`;
       systemPrompt: explorerPrompt,
       userPrompt: explorerUserPrompt,
       schema: ExplorerOutputSchema,
-      preferredModel: MODEL_CONFIG.HEAVY,
+      preferredModel: MODEL_CONFIG.GROQ_HEAVY,
     });
 
     this.emit('claim_found', `Explorer identified ${explorerOutput.discoveredEntities.length} candidate entities with source citations`, 'explorer');
@@ -565,10 +565,10 @@ ${scrapedContext || 'No additional scraped text retrieved.'}`;
     const discoveredUrls: string[] = [];
     const searchSnippets: Array<{ title: string; url: string; snippet: string; domain: string }> = [];
 
-    for (const rawQ of plan.searchStrategies.investigatorFocus.slice(0, 3)) {
+    for (const rawQ of plan.searchStrategies.investigatorFocus.slice(0, 2)) {
       const cleanQ = rawQ.replace(/^["']|["']$/g, '').replace(/^(verify|check|search\s+for|query)\s+/i, '').trim();
       this.emit('search_query', `Investigator searching: "${cleanQ}"`, 'investigator', { query: cleanQ });
-      const results = await searchLiveWeb(cleanQ, 4);
+      const results = await searchLiveWeb(cleanQ, 3);
       for (const item of results) {
         const src = buildSourceFromSearch(item, 'investigator');
         onSourceFound(src);
@@ -580,11 +580,11 @@ ${scrapedContext || 'No additional scraped text retrieved.'}`;
 
     // Scrape official pages
     let scrapedContext = '';
-    for (const url of Array.from(new Set(discoveredUrls)).slice(0, 3)) {
+    for (const url of Array.from(new Set(discoveredUrls)).slice(0, 2)) {
       this.emit('scrape_started', `Investigator inspecting official content: ${url}`, 'investigator', { url });
-      const scraped = await scrapeUrl(url, 4500);
+      const scraped = await scrapeUrl(url, 3000);
       if (scraped.scrapedSuccessfully) {
-        scrapedContext += `\n--- PRIMARY SOURCE: ${scraped.title} (${scraped.url}) ---\n${scraped.cleanText.slice(0, 1500)}\n`;
+        scrapedContext += `\n--- PRIMARY SOURCE: ${scraped.title} (${scraped.url}) ---\n${scraped.cleanText.slice(0, 1000)}\n`;
         this.emit('scrape_completed', `Investigator extracted ${scraped.wordCount} words for verification`, 'investigator', { scraped });
       }
     }
@@ -643,7 +643,7 @@ ${scrapedContext || 'No additional scraped text retrieved.'}`;
       systemPrompt: investigatorPrompt,
       userPrompt: investigatorUserPrompt,
       schema: InvestigatorOutputSchema,
-      preferredModel: MODEL_CONFIG.HEAVY,
+      preferredModel: MODEL_CONFIG.GROQ_HEAVY,
     });
 
     this.emit('verification_started', `Investigator issued ${investigatorOutput.counterEvidenceOrChallenges.length} challenges and ${investigatorOutput.verifiedConfirmations.length} primary confirmations`, 'investigator');

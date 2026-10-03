@@ -1,8 +1,10 @@
 /**
- * Vikaas AI - Groq AI Inference Client
+ * Vikaas AI - Multi-Provider AI Inference Client
+ * Supports Groq and OpenRouter with automatic fallbacks.
  * Handles structured JSON completion with model fallbacks and schema validation.
  */
 import Groq from 'groq-sdk';
+import OpenAI from 'openai';
 import { z } from 'zod';
 import dotenv from 'dotenv';
 
@@ -11,16 +13,26 @@ dotenv.config({ path: '.env' });
 dotenv.config();
 
 export const MODEL_CONFIG = {
-  HEAVY: process.env.GROQ_HEAVY_MODEL || 'openai/gpt-oss-120b',
-  LIGHT: process.env.GROQ_LIGHT_MODEL || 'openai/gpt-oss-20b',
-  FALLBACK_HEAVY: 'qwen/qwen3.8-27b',
-  FALLBACK_LIGHT: 'openai/gpt-oss-20b',
+  // Groq models - using only available models
+  GROQ_HEAVY: process.env.GROQ_HEAVY_MODEL || 'llama-3.1-70b-versatile',
+  GROQ_LIGHT: process.env.GROQ_LIGHT_MODEL || 'llama-3.1-8b-instant',
+  GROQ_FALLBACK_HEAVY: 'llama-3.1-8b-instant',
+  GROQ_FALLBACK_LIGHT: 'llama-3.1-8b-instant',
+  // OpenRouter models (uses your $5 free credit)
+  OPENROUTER_HEAVY: 'meta-llama/llama-3.1-70b-instruct',
+  OPENROUTER_LIGHT: 'meta-llama/llama-3.1-8b-instruct',
+  OPENROUTER_FALLBACK: 'meta-llama/llama-3.1-8b-instruct',
 };
 
 let groqInstance: Groq | null = null;
+let openRouterInstance: OpenAI | null = null;
 
 export function getGroqApiKey(): string {
   return process.env.GROQ_API_KEY?.trim() || '';
+}
+
+export function getOpenRouterApiKey(): string {
+  return process.env.OPENROUTER_API_KEY?.trim() || '';
 }
 
 export function getGroqClient(): Groq | null {
@@ -34,9 +46,32 @@ export function getGroqClient(): Groq | null {
   return groqInstance;
 }
 
+export function getOpenRouterClient(): OpenAI | null {
+  const key = getOpenRouterApiKey();
+  if (!key) {
+    return null;
+  }
+  if (!openRouterInstance) {
+    openRouterInstance = new OpenAI({
+      apiKey: key,
+      baseURL: 'https://openrouter.ai/api/v1',
+    });
+  }
+  return openRouterInstance;
+}
+
 export function isGroqConfigured(): boolean {
   const key = getGroqApiKey();
   return Boolean(key && key.length > 10);
+}
+
+export function isOpenRouterConfigured(): boolean {
+  const key = getOpenRouterApiKey();
+  return Boolean(key && key.length > 10);
+}
+
+export function isAnyProviderConfigured(): boolean {
+  return isGroqConfigured() || isOpenRouterConfigured();
 }
 
 export async function callGroqStructured<T>(params: {
@@ -46,43 +81,99 @@ export async function callGroqStructured<T>(params: {
   preferredModel?: string;
   temperature?: number;
 }): Promise<{ data: T; modelUsed: string; isFallback: boolean }> {
-  const client = getGroqClient();
-  if (!client) {
-    throw new Error('GROQ_API_KEY is not configured in process.env');
+  const groqClient = getGroqClient();
+  const openRouterClient = getOpenRouterClient();
+
+  if (!groqClient && !openRouterClient) {
+    throw new Error('Neither GROQ_API_KEY nor OPENROUTER_API_KEY is configured in process.env');
   }
 
-  console.log('[VikaasAI GroqClient] Attempting Groq API call with key:', getGroqApiKey().substring(0, 10) + '...');
+  console.log('[VikaasAI GroqClient] Provider status - Groq:', !!groqClient, 'OpenRouter:', !!openRouterClient);
 
-  const primaryModel = params.preferredModel || MODEL_CONFIG.HEAVY;
-  const isLightweight = primaryModel === MODEL_CONFIG.LIGHT;
-  const fallbackModel = isLightweight ? MODEL_CONFIG.FALLBACK_LIGHT : MODEL_CONFIG.FALLBACK_HEAVY;
+  let lastError: Error | null = null;
 
-  // Attempt with primary model
-  try {
-    const rawResult = await executeGroqCall(client, primaryModel, params.systemPrompt, params.userPrompt, params.temperature);
-    const parsed = parseAndValidate(rawResult, params.schema);
-    return { data: parsed, modelUsed: primaryModel, isFallback: false };
-  } catch (primaryError: any) {
-    console.warn(`[VikaasAI GroqClient] Primary model (${primaryModel}) call failed: ${primaryError.message}. Attempting fallback to ${fallbackModel}...`);
-    
-    // Attempt with fallback model
+  // Try Groq first if available
+  if (groqClient) {
     try {
-      const fallbackResult = await executeGroqCall(client, fallbackModel, params.systemPrompt, params.userPrompt, params.temperature);
-      const parsed = parseAndValidate(fallbackResult, params.schema);
-      return { data: parsed, modelUsed: fallbackModel, isFallback: true };
-    } catch (fallbackError: any) {
-      // One retry with structured correction
-      console.warn(`[VikaasAI GroqClient] Attempting one correction retry with fallback model...`);
-      const correctionPrompt = `${params.userPrompt}\n\nIMPORTANT: Return ONLY valid JSON conforming to the requested schema. Ensure all fields are present and properly escaped.`;
-      const retryResult = await executeGroqCall(client, fallbackModel, params.systemPrompt, correctionPrompt, 0.2);
-      const parsed = parseAndValidate(retryResult, params.schema);
-      return { data: parsed, modelUsed: fallbackModel, isFallback: true };
+      console.log('[VikaasAI GroqClient] Attempting Groq API call...');
+      const primaryModel = params.preferredModel || MODEL_CONFIG.GROQ_HEAVY;
+      const isLightweight = primaryModel === MODEL_CONFIG.GROQ_LIGHT;
+      const fallbackModel = isLightweight ? MODEL_CONFIG.GROQ_FALLBACK_LIGHT : MODEL_CONFIG.GROQ_FALLBACK_HEAVY;
+
+      const rawResult = await executeGroqCall(groqClient, primaryModel, params.systemPrompt, params.userPrompt, params.temperature);
+      const parsed = parseAndValidate(rawResult, params.schema);
+      return { data: parsed, modelUsed: primaryModel, isFallback: false };
+    } catch (groqError: any) {
+      lastError = groqError;
+      console.warn(`[VikaasAI GroqClient] Groq failed: ${groqError.message}. Trying fallback model...`);
+
+      try {
+        const fallbackModel = MODEL_CONFIG.GROQ_FALLBACK_HEAVY;
+        const fallbackResult = await executeGroqCall(groqClient, fallbackModel, params.systemPrompt, params.userPrompt, params.temperature);
+        const parsed = parseAndValidate(fallbackResult, params.schema);
+        return { data: parsed, modelUsed: fallbackModel, isFallback: true };
+      } catch (groqFallbackError: any) {
+        lastError = groqFallbackError;
+        console.warn(`[VikaasAI GroqClient] Groq fallback also failed: ${groqFallbackError.message}. Switching to OpenRouter...`);
+      }
     }
   }
+
+  // Fallback to OpenRouter
+  if (openRouterClient) {
+    try {
+      console.log('[VikaasAI GroqClient] Attempting OpenRouter API call...');
+      const primaryModel = MODEL_CONFIG.OPENROUTER_HEAVY;
+
+      const rawResult = await executeOpenRouterCall(openRouterClient, primaryModel, params.systemPrompt, params.userPrompt, params.temperature);
+      const parsed = parseAndValidate(rawResult, params.schema);
+      return { data: parsed, modelUsed: primaryModel, isFallback: true };
+    } catch (orError: any) {
+      lastError = orError;
+      console.warn(`[VikaasAI GroqClient] OpenRouter failed: ${orError.message}. Trying fallback model...`);
+
+      try {
+        const fallbackModel = MODEL_CONFIG.OPENROUTER_FALLBACK;
+        const fallbackResult = await executeOpenRouterCall(openRouterClient, fallbackModel, params.systemPrompt, params.userPrompt, params.temperature);
+        const parsed = parseAndValidate(fallbackResult, params.schema);
+        return { data: parsed, modelUsed: fallbackModel, isFallback: true };
+      } catch (orFallbackError: any) {
+        lastError = orFallbackError;
+        console.error(`[VikaasAI GroqClient] All providers failed. Last error: ${orFallbackError.message}`);
+        throw new Error(`All AI providers failed. Last error: ${orFallbackError.message}`);
+      }
+    }
+  }
+
+  throw new Error(`No AI provider available. Last error: ${lastError?.message || 'unknown'}`);
 }
 
 async function executeGroqCall(
   client: Groq,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  temperature = 0.2
+): Promise<string> {
+  const completion = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    temperature,
+    response_format: { type: 'json_object' },
+  });
+
+  const content = completion.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error(`Empty response returned from model ${model}`);
+  }
+  return content;
+}
+
+async function executeOpenRouterCall(
+  client: OpenAI,
   model: string,
   systemPrompt: string,
   userPrompt: string,
