@@ -18,6 +18,7 @@ import { ResearchState, NodeStatus } from '../../types/research';
 interface ResearchGraphProps {
   state: ResearchState;
   onSelectItem: (item: any) => void;
+  isStatic?: boolean;
 }
 
 const nodeTypes = {
@@ -27,7 +28,7 @@ const nodeTypes = {
   escalationNode: EscalationNode,
 };
 
-export function ResearchGraph({ state, onSelectItem }: ResearchGraphProps) {
+export function ResearchGraph({ state, onSelectItem, isStatic = false }: ResearchGraphProps) {
   const { nodes, edges } = useMemo(() => {
     const calculatedNodes: Node[] = [];
     const calculatedEdges: Edge[] = [];
@@ -316,6 +317,10 @@ export function ResearchGraph({ state, onSelectItem }: ResearchGraphProps) {
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.3}
         maxZoom={1.5}
+        panOnDrag={!isStatic}
+        zoomOnScroll={!isStatic}
+        nodesDraggable={!isStatic}
+        elementsSelectable={!isStatic}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#262626" />

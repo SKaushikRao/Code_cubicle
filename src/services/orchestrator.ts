@@ -286,8 +286,8 @@ Output the structured research specification.`;
 
       // Run Arbiter LLM evaluation
       const arbiterSystemPrompt = `You are the Research Arbiter for Vikaas AI.
-You judge claims collected by Explorer and Investigator agents according to an explicit deterministic framework:
-1. Source Authority: Official gov/primary company > industry media > aggregator > unverified.
+You judge claims collected by Explorer and Investigator agents by focusing on broad relevance and directness.
+1. Relevance: Choose the most accurate, directly relevant, and well-supported claim based on the evidence.
 2. Freshness: Newer evidence takes precedence when sources are comparable.
 3. Directness: Direct primary statement > secondary mention.
 4. If evidence is insufficient, mark resolution as UNRESOLVED.
@@ -494,15 +494,18 @@ IMPORTANT: Generate a dashboard that displays ALL data found - both verified and
     }
 
     // Scrape discovered pages
-    let scrapedContext = '';
-    for (const url of Array.from(new Set(discoveredUrls)).slice(0, 2)) {
+    const uniqueUrls = Array.from(new Set(discoveredUrls)).slice(0, 3);
+    const scrapePromises = uniqueUrls.map(async url => {
       this.emit('scrape_started', `Explorer scraping page: ${url}`, 'explorer', { url });
       const scraped = await scrapeUrl(url, 3000);
       if (scraped.scrapedSuccessfully) {
-        scrapedContext += `\n--- SCRAPED PAGE: ${scraped.title} (${scraped.url}) ---\n${scraped.cleanText.slice(0, 1000)}\n`;
         this.emit('scrape_completed', `Explorer scraped ${scraped.wordCount} words from ${scraped.domain}`, 'explorer', { scraped });
       }
-    }
+      return scraped;
+    });
+
+    const scrapedResults = await Promise.all(scrapePromises);
+    const scrapedContext = scrapedResults.filter(s => s.scrapedSuccessfully).map(s => `\n--- SCRAPED PAGE: ${s.title} (${s.url}) ---\n${s.cleanText.slice(0, 1000)}\n`).join('');
 
     const snippetsSummary = searchSnippets.map((s, i) => `[Result ${i+1}] Title: ${s.title}\nURL: ${s.url}\nSummary: ${s.snippet}`).join('\n\n');
 
@@ -579,20 +582,23 @@ ${scrapedContext || 'No additional scraped text retrieved.'}`;
     }
 
     // Scrape official pages
-    let scrapedContext = '';
-    for (const url of Array.from(new Set(discoveredUrls)).slice(0, 2)) {
-      this.emit('scrape_started', `Investigator inspecting official content: ${url}`, 'investigator', { url });
+    const uniqueUrls = Array.from(new Set(discoveredUrls)).slice(0, 3);
+    const scrapePromises = uniqueUrls.map(async url => {
+      this.emit('scrape_started', `Investigator inspecting content: ${url}`, 'investigator', { url });
       const scraped = await scrapeUrl(url, 3000);
       if (scraped.scrapedSuccessfully) {
-        scrapedContext += `\n--- PRIMARY SOURCE: ${scraped.title} (${scraped.url}) ---\n${scraped.cleanText.slice(0, 1000)}\n`;
         this.emit('scrape_completed', `Investigator extracted ${scraped.wordCount} words for verification`, 'investigator', { scraped });
       }
-    }
+      return scraped;
+    });
+
+    const scrapedResults = await Promise.all(scrapePromises);
+    const scrapedContext = scrapedResults.filter(s => s.scrapedSuccessfully).map(s => `\n--- SOURCE: ${s.title} (${s.url}) ---\n${s.cleanText.slice(0, 1000)}\n`).join('');
 
     const snippetsSummary = searchSnippets.map((s, i) => `[Official Result ${i+1}] Title: ${s.title}\nURL: ${s.url}\nSummary: ${s.snippet}`).join('\n\n');
 
     const investigatorPrompt = `You are the Investigator Agent for Vikaas AI.
-Your role: Independent verification and adversarial research. Challenge claims, check for outdated pricing or launch dates, identify missing fields, prioritize primary/official sources.
+Your role: Independent verification and adversarial research. Challenge claims, check for outdated pricing or launch dates, identify missing fields, prioritize direct and relevant evidence.
 Extract confirmed field values and any counter-evidence directly from the live web evidence provided below.
 You must return a single JSON object with the format:
 {

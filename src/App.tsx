@@ -17,8 +17,13 @@ import {
   ShieldCheck,
   Compass,
   Cpu,
-  Layers
+  Layers,
+  Mic,
+  Volume2,
+  VolumeX,
+  Code
 } from 'lucide-react';
+import { JarvisMode } from './components/arena/JarvisMode';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar, ActiveTab } from './components/layout/TopBar';
 import { CounterBar } from './components/arena/CounterBar';
@@ -68,6 +73,13 @@ export default function App() {
   const [recentSessions, setRecentSessions] = useState<Array<{ id: string; query: string; timestamp: string }>>([]);
   const eventSourceRef = useRef<EventSource | null>(null);
 
+  // New features state
+  const [jarvisMode, setJarvisMode] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [responseLanguage, setResponseLanguage] = useState<'en' | 'hi'>('en');
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
   // Fetch initial system status safely (never throwing on 404 or HTML responses)
   useEffect(() => {
     fetch('/api/system/status')
@@ -104,6 +116,52 @@ export default function App() {
     setInputQuery('');
     setActiveTab('graph');
     setSelectedInspectorItem(null);
+  };
+
+  const playVoiceSummary = async (text: string, lang: 'en' | 'hi') => {
+    if (!voiceEnabled) return;
+    setIsSpeaking(true);
+    try {
+      const res = await fetch('/api/voice/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, language: lang })
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const audio = new Audio(URL.createObjectURL(blob));
+        audio.onended = () => setIsSpeaking(false);
+        audio.play();
+      } else {
+        setIsSpeaking(false);
+      }
+    } catch {
+      setIsSpeaking(false);
+    }
+  };
+
+  const toggleListening = () => {
+    if (isListening) return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = responseLanguage === 'hi' ? 'hi-IN' : 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInputQuery(transcript);
+      setIsListening(false);
+      setTimeout(() => handleRunResearch(transcript), 300);
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    recognition.start();
   };
 
   // Client-side autonomous research execution fallback
@@ -239,6 +297,7 @@ export default function App() {
       if (data.entities.length > 0) {
         setSelectedInspectorItem({ type: 'entity', entity: data.entities[0] });
         setInspectorOpen(true);
+        playVoiceSummary(`Research completed. Discovered ${data.entities.length} verified entities.`, responseLanguage);
       }
     }, 3400);
   };
@@ -380,6 +439,10 @@ export default function App() {
           if (d.entities && d.entities.length > 0) {
             setSelectedInspectorItem({ type: 'entity', entity: d.entities[0] });
             setInspectorOpen(true);
+            const summaryText = responseLanguage === 'hi' 
+              ? `अनुसंधान पूरा हुआ। ${d.entities.length} सत्यापित रिकॉर्ड मिले हैं।` 
+              : `Research completed. Discovered ${d.entities.length} verified records.`;
+            playVoiceSummary(summaryText, responseLanguage);
           }
         } else if (payload.type === 'fatal_error') {
           console.warn('[GroundTruth] SSE fatal_error payload, switching to fallback:', payload.message);
@@ -432,6 +495,10 @@ export default function App() {
             if (d.entities && d.entities.length > 0) {
               setSelectedInspectorItem({ type: 'entity', entity: d.entities[0] });
               setInspectorOpen(true);
+              const summaryText = responseLanguage === 'hi' 
+                ? `अनुसंधान पूरा हुआ। ${d.entities.length} सत्यापित रिकॉर्ड मिले हैं।` 
+                : `Research completed. Discovered ${d.entities.length} verified records.`;
+              playVoiceSummary(summaryText, responseLanguage);
             }
             return;
           }
@@ -449,6 +516,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-neutral-950 text-neutral-100 font-sans selection:bg-cyan-500/20 selection:text-cyan-200">
+      {jarvisMode && <JarvisMode state={state} onExit={() => setJarvisMode(false)} onSelectItem={(item) => { setSelectedInspectorItem(item); setInspectorOpen(true); }} />}
       {/* 1. Left Sidebar */}
       <Sidebar
         onNewResearch={handleNewResearch}
@@ -473,6 +541,35 @@ export default function App() {
           isDemoMode={state.isDemoMode}
           hasResults={state.entities.length > 0}
         />
+        <div className="px-5 py-2 border-b border-neutral-800 flex justify-between items-center bg-neutral-900/50">
+          <button onClick={() => setJarvisMode(true)} className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider px-3 py-1.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 hover:bg-cyan-900 transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)]">
+            <Code className="w-3.5 h-3.5" /> Enable JARVIS Mode
+          </button>
+          
+          <div className="flex items-center gap-4 text-xs font-semibold">
+            <div className="flex bg-neutral-950 rounded-lg border border-neutral-800 overflow-hidden">
+              <button 
+                onClick={() => setResponseLanguage('en')}
+                className={`px-3 py-1.5 ${responseLanguage === 'en' ? 'bg-cyan-900/50 text-cyan-300' : 'text-neutral-500 hover:text-neutral-300'}`}
+              >
+                EN
+              </button>
+              <button 
+                onClick={() => setResponseLanguage('hi')}
+                className={`px-3 py-1.5 border-l border-neutral-800 ${responseLanguage === 'hi' ? 'bg-cyan-900/50 text-cyan-300' : 'text-neutral-500 hover:text-neutral-300'}`}
+              >
+                HI
+              </button>
+            </div>
+            <button 
+              onClick={() => setVoiceEnabled(!voiceEnabled)} 
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${voiceEnabled ? 'bg-emerald-950/40 border-emerald-900 text-emerald-400' : 'bg-neutral-900 border-neutral-800 text-neutral-500'}`}
+            >
+              {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+              {voiceEnabled ? 'Voice On' : 'Muted'}
+            </button>
+          </div>
+        </div>
 
         {/* Center Arena Scroll View */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -493,8 +590,17 @@ export default function App() {
                   onChange={(e) => setInputQuery(e.target.value)}
                   placeholder="Enter any research objective... e.g. 'Find 20 EV charging companies operating in Rajasthan, compare cities served, charger types, pricing and official contact information, verify important claims and flag contradictions'"
                   disabled={isResearching}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-lg pl-10 pr-4 py-2.5 text-xs text-neutral-200 placeholder:text-neutral-500 focus:outline-none focus:border-cyan-500 disabled:opacity-50 transition-colors"
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-lg pl-10 pr-12 py-2.5 text-xs text-neutral-200 placeholder:text-neutral-500 focus:outline-none focus:border-cyan-500 disabled:opacity-50 transition-colors"
                 />
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  disabled={isResearching}
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-colors ${isListening ? 'bg-rose-500/20 text-rose-400 animate-pulse' : 'text-neutral-500 hover:text-cyan-400 hover:bg-neutral-800'} disabled:opacity-50`}
+                  title="Speak query"
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
               </div>
 
               <button

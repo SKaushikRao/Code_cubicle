@@ -39,7 +39,7 @@ app.get('/api/system/status', (req: Request, res: Response) => {
   const status: SystemStatus = {
     groqConfigured: configured,
     groqModel: configured
-      ? `${MODEL_CONFIG.HEAVY} (Primary) / ${MODEL_CONFIG.LIGHT} (Planner)`
+      ? `${MODEL_CONFIG.GROQ_HEAVY} (Primary) / ${MODEL_CONFIG.GROQ_LIGHT} (Planner)`
       : 'Ready (Awaiting GROQ_API_KEY)',
     searchEngine: 'Live Web Scraping & Multi-Engine Crawler',
     scraperActive: true,
@@ -170,7 +170,7 @@ Dataset Entities: ${JSON.stringify(entities.slice(0, 15))}`;
         systemPrompt: askPrompt,
         userPrompt: userContent,
         schema: AskDatasetResponseSchema,
-        preferredModel: MODEL_CONFIG.LIGHT,
+        preferredModel: MODEL_CONFIG.GROQ_LIGHT,
       });
 
       res.json(data);
@@ -194,6 +194,54 @@ Dataset Entities: ${JSON.stringify(entities.slice(0, 15))}`;
     filteredCount: matches.length,
     provenanceNote: 'Computed via deterministic client-session filtering.',
   });
+});
+
+// 4. ElevenLabs Voice Synthesis Endpoint
+app.post('/api/voice/synthesize', async (req: Request, res: Response) => {
+  try {
+    const { text, language } = req.body;
+    if (!text) {
+      res.status(400).json({ error: 'text is required' });
+      return;
+    }
+
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({ error: 'ElevenLabs API key not configured' });
+      return;
+    }
+
+    // Use multilingual model for Hindi, default for English
+    const modelId = language === 'hi' ? 'eleven_multilingual_v2' : 'eleven_monolingual_v1';
+    
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'audio/mpeg',
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey
+      },
+      body: JSON.stringify({
+        text,
+        model_id: modelId,
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.5
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`ElevenLabs API error: ${response.statusText}`);
+    }
+
+    const audioBuffer = await response.arrayBuffer();
+    res.set('Content-Type', 'audio/mpeg');
+    res.send(Buffer.from(audioBuffer));
+  } catch (error: any) {
+    console.error('[Voice Synthesis Error]:', error);
+    res.status(500).json({ error: error.message || 'Voice synthesis failed' });
+  }
 });
 
 export default app;
