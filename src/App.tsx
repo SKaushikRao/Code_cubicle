@@ -542,8 +542,15 @@ export default function App() {
           hasResults={state.entities.length > 0}
         />
         <div className="px-5 py-2 border-b border-neutral-800 flex justify-between items-center bg-neutral-900/50">
-          <button onClick={() => setJarvisMode(true)} className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider px-3 py-1.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 hover:bg-cyan-900 transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)]">
-            <Code className="w-3.5 h-3.5" /> Enable JARVIS Mode
+          <button 
+            onClick={() => setJarvisMode(!jarvisMode)} 
+            className={`flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider px-3 py-1.5 rounded-full border transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] ${
+              jarvisMode 
+                ? 'bg-emerald-950 text-emerald-400 border-emerald-800 hover:bg-emerald-900' 
+                : 'bg-cyan-950 text-cyan-400 border-cyan-800 hover:bg-cyan-900'
+            }`}
+          >
+            <Code className="w-3.5 h-3.5" /> {jarvisMode ? 'JARVIS ONLINE' : 'Enable JARVIS Mode'}
           </button>
           
           <div className="flex items-center gap-4 text-xs font-semibold">

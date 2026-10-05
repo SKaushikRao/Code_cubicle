@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ResearchState } from '../../types/research';
 import { ResearchGraph } from '../graph/ResearchGraph';
-import { ShieldCheck, Crosshair, X, PenTool, Eraser, Download, MousePointer2 } from 'lucide-react';
+import { ShieldCheck, Crosshair, X, PenTool, Eraser, Download, MousePointer2, Maximize2, Minimize2, RotateCcw, Mic, MicOff, Monitor } from 'lucide-react';
 // @ts-ignore
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import html2canvas from 'html2canvas';
@@ -13,21 +13,28 @@ interface JarvisModeProps {
 }
 
 type Tool = 'pointer' | 'marker' | 'eraser';
+type JarvisVoiceStatus = 'idle' | 'activating' | 'online' | 'ready' | 'unavailable' | 'playing';
 
 export function JarvisMode({ state, onExit, onSelectItem }: JarvisModeProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasPlayedGreetingRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const [gesture, setGesture] = useState<string>('Initializing Camera...');
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cursorPos, setCursorPos] = useState({ x: -100, y: -100 });
   const [selectedNodeData, setSelectedNodeData] = useState<any>(null);
   const [tool, setTool] = useState<Tool>('pointer');
+  const [isTransitioning, setIsTransitioning] = useState(true);
+  const [voiceStatus, setVoiceStatus] = useState<JarvisVoiceStatus>('idle');
+  const [handTrackingEnabled, setHandTrackingEnabled] = useState(true);
+  const [selectedGraphItem, setSelectedGraphItem] = useState<any>(null);
 
   // Virtual Notebook Panning & Dragging Nodes
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
-  const [placedNodes, setPlacedNodes] = useState<Array<{ id: string; x: number; y: number; data: any }>>([]);
+  const [placedNodes, setPlacedNodes] = useState<Array<{ id: string; x: number; y: number; data: any; isUserCreated: boolean }>>([]);
   const draggingNodeRef = useRef<any>(null);
 
   // Refs for tracking movement without triggering re-renders in the loop
@@ -35,9 +42,105 @@ export function JarvisMode({ state, onExit, onSelectItem }: JarvisModeProps) {
   const isDrawing = useRef(false);
   const lastDrawPos = useRef({ x: 0, y: 0 });
   const currentTool = useRef<Tool>('pointer');
+  const lastGestureRef = useRef<string>('');
+  const gestureCooldownRef = useRef<number>(0);
+  const lastActionRef = useRef<number>(0);
 
   // Update ref when state changes so the loop sees it
   useEffect(() => { currentTool.current = tool; }, [tool]);
+
+  // Cinematic transition effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsTransitioning(false);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Voice greeting with ElevenLabs
+  const playJarvisGreeting = useCallback(async () => {
+    if (hasPlayedGreetingRef.current) return;
+    
+    try {
+      setVoiceStatus('activating');
+      
+      // Initialize audio context on user interaction
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+      
+      setVoiceStatus('online');
+      
+      const response = await fetch('/api/voice/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          text: 'Hello sir, jarvis at your assistance for research and real world data',
+          language: 'en'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Voice synthesis failed');
+      }
+      
+      setVoiceStatus('playing');
+      const blob = await response.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      
+      audio.onended = () => {
+        setVoiceStatus('ready');
+        hasPlayedGreetingRef.current = true;
+      };
+      
+      audio.onerror = () => {
+        setVoiceStatus('unavailable');
+        hasPlayedGreetingRef.current = true;
+      };
+      
+      await audio.play();
+      
+    } catch (error) {
+      console.warn('[JARVIS] Voice greeting failed:', error);
+      setVoiceStatus('unavailable');
+      hasPlayedGreetingRef.current = true;
+    }
+  }, []);
+
+  // Trigger greeting after transition completes
+  useEffect(() => {
+    if (!isTransitioning && voiceStatus === 'idle') {
+      playJarvisGreeting();
+    }
+  }, [isTransitioning, voiceStatus, playJarvisGreeting]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onExit();
+      } else if (e.key === 'f' || e.key === 'F') {
+        // Fit graph to screen - handled by React Flow
+      } else if (e.key === 'r' || e.key === 'R') {
+        // Reset layout
+        setPanOffset({ x: 0, y: 0 });
+        setPlacedNodes([]);
+      } else if (e.key === 'm' || e.key === 'M') {
+        setHandTrackingEnabled(prev => !prev);
+      } else if (e.key === 'v' || e.key === 'V') {
+        if (voiceStatus === 'unavailable' || voiceStatus === 'ready') {
+          playJarvisGreeting();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onExit, voiceStatus, playJarvisGreeting]);
 
   // Set up canvas size
   useEffect(() => {
@@ -106,6 +209,11 @@ export function JarvisMode({ state, onExit, onSelectItem }: JarvisModeProps) {
     let stream: MediaStream | null = null;
 
     const initMediaPipe = async () => {
+      if (!handTrackingEnabled) {
+        setGesture('Hand Tracking Disabled');
+        return;
+      }
+
       try {
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
@@ -116,7 +224,7 @@ export function JarvisMode({ state, onExit, onSelectItem }: JarvisModeProps) {
             delegate: "GPU"
           },
           runningMode: "VIDEO",
-          numHands: 2 // Changed to 2 for panning
+          numHands: 2
         });
 
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -134,12 +242,27 @@ export function JarvisMode({ state, onExit, onSelectItem }: JarvisModeProps) {
       }
     };
 
-    initMediaPipe();
+    if (handTrackingEnabled) {
+      initMediaPipe();
+    }
 
     let lastVideoTime = -1;
     const renderLoop = async () => {
+      if (!handTrackingEnabled) {
+        animationFrameId = requestAnimationFrame(renderLoop);
+        return;
+      }
+
       if (videoRef.current && videoRef.current.readyState >= 2 && handLandmarker) {
         const startTimeMs = performance.now();
+        const now = Date.now();
+        
+        // Gesture cooldown to prevent rapid triggers
+        if (now - gestureCooldownRef.current < 150) {
+          animationFrameId = requestAnimationFrame(renderLoop);
+          return;
+        }
+
         if (lastVideoTime !== videoRef.current.currentTime) {
           lastVideoTime = videoRef.current.currentTime;
           const results = handLandmarker.detectForVideo(videoRef.current, startTimeMs);
@@ -148,9 +271,15 @@ export function JarvisMode({ state, onExit, onSelectItem }: JarvisModeProps) {
 
             // Check for Two Hands -> Panning Mode
             if (results.landmarks.length === 2) {
-              setGesture('Both Palms Detected (Panning Notebook)');
-              const hand1 = results.landmarks[0][0]; // wrist of hand 1
-              const hand2 = results.landmarks[1][0]; // wrist of hand 2
+              const newGesture = 'Both Palms Detected (Panning)';
+              if (newGesture !== lastGestureRef.current) {
+                setGesture(newGesture);
+                lastGestureRef.current = newGesture;
+                gestureCooldownRef.current = now;
+              }
+              
+              const hand1 = results.landmarks[0][0];
+              const hand2 = results.landmarks[1][0];
 
               const avgX = ((1 - hand1.x) + (1 - hand2.x)) / 2 * window.innerWidth;
               const avgY = (hand1.y + hand2.y) / 2 * window.innerHeight;
@@ -163,13 +292,12 @@ export function JarvisMode({ state, onExit, onSelectItem }: JarvisModeProps) {
                 const dx = avgX - panState.current.lastHandsX;
                 const dy = avgY - panState.current.lastHandsY;
 
-                panState.current.x += dx * 1.5; // multiplier for faster panning
+                panState.current.x += dx * 1.5;
                 panState.current.y += dy * 1.5;
 
                 panState.current.lastHandsX = avgX;
                 panState.current.lastHandsY = avgY;
 
-                // Update react state to trigger CSS transform render
                 setPanOffset({ x: panState.current.x, y: panState.current.y });
               }
 
@@ -181,70 +309,110 @@ export function JarvisMode({ state, onExit, onSelectItem }: JarvisModeProps) {
               const landmarks = results.landmarks[0];
               const indexTip = landmarks[8];
               const thumbTip = landmarks[4];
+              const middleTip = landmarks[12];
+              const wrist = landmarks[0];
 
               const screenX = (1 - indexTip.x) * window.innerWidth;
               const screenY = indexTip.y * window.innerHeight;
 
+              // Smooth cursor movement
               setCursorPos(prev => ({
-                x: prev.x < 0 ? screenX : prev.x * 0.7 + screenX * 0.3,
-                y: prev.y < 0 ? screenY : prev.y * 0.7 + screenY * 0.3
+                x: prev.x < 0 ? screenX : prev.x * 0.75 + screenX * 0.25,
+                y: prev.y < 0 ? screenY : prev.y * 0.75 + screenY * 0.25
               }));
 
               const distance = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
               const isPinching = distance < 0.05;
+              
+              // Detect closed fist (all fingers curled)
+              const isFist = landmarks.every((point: any) => point.y > wrist.y);
 
-              // Marker writes without pinching
               const isDrawingActive = currentTool.current === 'marker' ? true : isPinching;
 
               if (currentTool.current === 'pointer') {
-
-                // Hover Highlight Logic
                 const hoveredEl = document.elementFromPoint(screenX, screenY);
                 const nodeEl = hoveredEl?.closest('.react-flow__node');
 
-                document.querySelectorAll('.jarvis-highlight').forEach(el => el.classList.remove('ring-4', 'ring-cyan-400', 'shadow-[0_0_15px_#22d3ee]', 'jarvis-highlight'));
+                document.querySelectorAll('.jarvis-highlight').forEach(el => el.classList.remove('ring-2', 'ring-cyan-400', 'jarvis-highlight'));
                 let hoveredNodeData = null;
                 if (nodeEl) {
-                  nodeEl.classList.add('ring-4', 'ring-cyan-400', 'shadow-[0_0_15px_#22d3ee]', 'jarvis-highlight');
+                  nodeEl.classList.add('ring-2', 'ring-cyan-400', 'jarvis-highlight');
                   hoveredNodeData = {
-                    type: 'Extracted Node',
+                    type: 'Graph Node',
                     content: nodeEl.textContent || 'Unknown Data'
                   };
                 }
 
-                if (isPinching) {
+                if (isFist && now - lastActionRef.current > 500) {
+                  // Action: Open source or activate selected node
+                  setGesture('Closed Fist: Activating');
+                  lastActionRef.current = now;
+                  gestureCooldownRef.current = now;
+                  
+                  if (selectedGraphItem?.type === 'source' && selectedGraphItem.source?.url) {
+                    window.open(selectedGraphItem.source.url, '_blank');
+                  }
+                } else if (isPinching) {
                   if (screenX < window.innerWidth * 0.3) {
-                    setGesture('Pointer: Extracting Node');
+                    const newGesture = 'Pinch: Grabbing Node';
+                    if (newGesture !== lastGestureRef.current) {
+                      setGesture(newGesture);
+                      lastGestureRef.current = newGesture;
+                    }
                     if (!draggingNodeRef.current && hoveredNodeData) {
                       draggingNodeRef.current = hoveredNodeData;
                     }
                   } else {
-                    setGesture('Pointer: Dropping Node');
+                    const newGesture = 'Pinch: Dragging';
+                    if (newGesture !== lastGestureRef.current) {
+                      setGesture(newGesture);
+                      lastGestureRef.current = newGesture;
+                    }
                   }
                 } else {
-                  setGesture('Open Palm: Hover');
+                  const newGesture = 'Open Palm: Hover';
+                  if (newGesture !== lastGestureRef.current) {
+                    setGesture(newGesture);
+                    lastGestureRef.current = newGesture;
+                  }
                   if (draggingNodeRef.current && screenX > window.innerWidth * 0.3) {
-                    // Drop node
                     const rect = containerRef.current?.getBoundingClientRect();
                     if (rect) {
                       const dropX = screenX - rect.left;
                       const dropY = screenY - rect.top;
-                      setPlacedNodes(prev => [...prev, { id: `n-${Date.now()}`, x: dropX, y: dropY, data: draggingNodeRef.current }]);
+                      setPlacedNodes(prev => [...prev, { 
+                        id: `n-${Date.now()}`, 
+                        x: dropX, 
+                        y: dropY, 
+                        data: draggingNodeRef.current,
+                        isUserCreated: true 
+                      }]);
                     }
                   }
                   draggingNodeRef.current = null;
                 }
               } else if (currentTool.current === 'marker') {
-                setGesture('Marker: Writing');
+                const newGesture = 'Marker: Drawing';
+                if (newGesture !== lastGestureRef.current) {
+                  setGesture(newGesture);
+                  lastGestureRef.current = newGesture;
+                }
                 drawOnCanvas(screenX, screenY, isDrawingActive);
               } else if (currentTool.current === 'eraser') {
-                if (isPinching) setGesture('Eraser: Erasing');
-                else setGesture('Eraser: Hover');
+                const newGesture = isPinching ? 'Eraser: Erasing' : 'Eraser: Hover';
+                if (newGesture !== lastGestureRef.current) {
+                  setGesture(newGesture);
+                  lastGestureRef.current = newGesture;
+                }
                 drawOnCanvas(screenX, screenY, isDrawingActive);
               }
             }
           } else {
-            setGesture('No Hands Detected');
+            const newGesture = 'No Hands Detected';
+            if (newGesture !== lastGestureRef.current) {
+              setGesture(newGesture);
+              lastGestureRef.current = newGesture;
+            }
             setCursorPos({ x: -100, y: -100 });
             isDrawing.current = false;
             panState.current.isPanning = false;
@@ -261,7 +429,7 @@ export function JarvisMode({ state, onExit, onSelectItem }: JarvisModeProps) {
       if (handLandmarker) handLandmarker.close();
       if (stream) stream.getTracks().forEach(t => t.stop());
     };
-  }, []);
+  }, [handTrackingEnabled]);
 
   const handleExport = useCallback(async () => {
     if (containerRef.current) {
@@ -281,135 +449,250 @@ export function JarvisMode({ state, onExit, onSelectItem }: JarvisModeProps) {
     }
   }, []);
 
+  const handleDeleteUserNode = (nodeId: string) => {
+    const node = placedNodes.find(n => n.id === nodeId);
+    if (node && node.isUserCreated) {
+      setPlacedNodes(prev => prev.filter(n => n.id !== nodeId));
+    }
+  };
+
+  const getVoiceStatusColor = () => {
+    switch (voiceStatus) {
+      case 'activating': return 'text-amber-400';
+      case 'online': return 'text-cyan-400';
+      case 'playing': return 'text-emerald-400';
+      case 'ready': return 'text-emerald-300';
+      case 'unavailable': return 'text-neutral-500';
+      default: return 'text-neutral-400';
+    }
+  };
+
+  const getVoiceStatusText = () => {
+    switch (voiceStatus) {
+      case 'activating': return 'JARVIS ACTIVATING';
+      case 'online': return 'JARVIS ONLINE';
+      case 'playing': return 'JARVIS SPEAKING';
+      case 'ready': return 'JARVIS READY';
+      case 'unavailable': return 'VOICE UNAVAILABLE';
+      default: return 'JARVIS IDLE';
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-neutral-950 text-cyan-500 overflow-hidden font-mono selection:bg-cyan-900 flex flex-col">
-      {/* JARVIS Overlay UI */}
-      <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-[200] pointer-events-none">
-        <div className="flex items-center gap-3">
-          <ShieldCheck className="w-8 h-8 text-cyan-400" />
-          <div>
-            <h1 className="text-xl font-bold tracking-widest text-cyan-400 uppercase">J.A.R.V.I.S. INTERFACE</h1>
-            <p className="text-xs text-cyan-600">VIRTUAL NOTEBOOK PROTOCOL [ACTIVE]</p>
-          </div>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="bg-cyan-950/80 border border-cyan-800/80 px-3 py-1.5 rounded text-xs text-cyan-300 font-bold uppercase backdrop-blur-sm">
-            GESTURE: {gesture}
-          </div>
-          <button
-            onClick={onExit}
-            className="pointer-events-auto mt-2 px-5 py-2 bg-cyan-900/50 hover:bg-cyan-800/80 border border-cyan-500 text-cyan-100 text-xs font-bold rounded transition-all cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.4)] backdrop-blur-sm"
-          >
-            EXIT JARVIS MODE
-          </button>
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div className="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-[200]">
-        <button onClick={() => setTool('pointer')} className={`p-3 rounded-xl border transition-all ${tool === 'pointer' ? 'bg-cyan-600 border-cyan-400 text-white shadow-[0_0_15px_rgba(6,182,212,0.6)]' : 'bg-neutral-900/80 border-cyan-900 text-cyan-500 hover:bg-neutral-800 backdrop-blur-md'}`} title="Pointer Tool">
-          <MousePointer2 className="w-5 h-5" />
-        </button>
-        <button onClick={() => setTool('marker')} className={`p-3 rounded-xl border transition-all ${tool === 'marker' ? 'bg-cyan-600 border-cyan-400 text-white shadow-[0_0_15px_rgba(6,182,212,0.6)]' : 'bg-neutral-900/80 border-cyan-900 text-cyan-500 hover:bg-neutral-800 backdrop-blur-md'}`} title="Marker Tool">
-          <PenTool className="w-5 h-5" />
-        </button>
-        <button onClick={() => setTool('eraser')} className={`p-3 rounded-xl border transition-all ${tool === 'eraser' ? 'bg-cyan-600 border-cyan-400 text-white shadow-[0_0_15px_rgba(6,182,212,0.6)]' : 'bg-neutral-900/80 border-cyan-900 text-cyan-500 hover:bg-neutral-800 backdrop-blur-md'}`} title="Eraser Tool">
-          <Eraser className="w-5 h-5" />
-        </button>
-        <div className="h-px bg-cyan-900/50 my-1 w-full" />
-        <button onClick={handleExport} className="p-3 rounded-xl bg-neutral-900/80 border border-emerald-800 text-emerald-400 hover:bg-emerald-900/50 hover:text-emerald-300 transition-all backdrop-blur-md" title="Export Snapshot">
-          <Download className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* Hidden Video for tracking */}
-      <video ref={videoRef} className="hidden" playsInline muted />
-
-      {/* Custom Hand Cursor */}
-      {isCameraActive && cursorPos.x >= 0 && (
-        <div
-          className="fixed pointer-events-none z-[300] transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-all duration-75"
-          style={{ left: cursorPos.x, top: cursorPos.y }}
-        >
-          {tool === 'pointer' && <Crosshair className="w-6 h-6 text-cyan-300 opacity-80" />}
-          {tool === 'marker' && <PenTool className="w-5 h-5 text-cyan-400 fill-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />}
-          {tool === 'eraser' && <div className="w-10 h-10 border-2 border-dashed border-rose-400 rounded-full bg-rose-500/20" />}
-        </div>
+    <div className="fixed inset-0 z-50 bg-neutral-950 text-cyan-500 overflow-hidden font-mono selection:bg-cyan-900/20 selection:text-cyan-200 flex flex-col transition-opacity duration-500"
+         style={{ opacity: isTransitioning ? 0.3 : 1 }}
+    >
+      {/* Cinematic Dim Overlay */}
+      {isTransitioning && (
+        <div className="absolute inset-0 bg-black z-[100] pointer-events-none transition-opacity duration-500" />
       )}
 
-      {/* Virtual Notebook Split View */}
-      <div className="flex-1 w-full h-full flex p-4 pt-20 gap-4">
-
-        {/* 30% Research Graph */}
-        <div className="w-[30%] h-full rounded-2xl border-2 border-cyan-900/50 overflow-hidden relative shadow-lg bg-neutral-950/80 shrink-0">
-          <ResearchGraph
-            state={state}
-            isStatic={true}
-            onSelectItem={useCallback((item: any) => {
-              if (tool === 'pointer') {
-                setSelectedNodeData(item);
-                onSelectItem(item);
-                draggingNodeRef.current = item;
-              }
-            }, [tool, onSelectItem])}
-          />
-          <div className="absolute top-2 left-2 text-[10px] text-cyan-500 bg-neutral-900/80 px-2 py-1 rounded font-bold">ARENA GRAPH (Pinch to Extract)</div>
-        </div>
-
-        {/* 70% Notepad */}
-        <div
-          className="flex-1 h-full rounded-2xl border-2 border-cyan-800/30 bg-neutral-900/40 relative overflow-hidden shadow-[inset_0_0_50px_rgba(6,182,212,0.05)]"
-          style={{ cursor: tool === 'marker' ? 'crosshair' : tool === 'eraser' ? 'cell' : 'default' }}
-        >
-          <div className="absolute top-2 left-2 text-[10px] text-cyan-500 bg-neutral-900/80 px-2 py-1 rounded font-bold z-[160]">WORKSPACE NOTEBOOK</div>
-
-          <div
-            ref={containerRef}
-            className="absolute w-[300vw] h-[300vh] left-[-100vw] top-[-100vh] will-change-transform transition-transform duration-75"
-            style={{ transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }}
-          >
-            {/* Drawing Canvas Overlay */}
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 pointer-events-none z-[150]"
-            />
-
-            {/* Placed Nodes */}
-            {placedNodes.map(node => (
-              <div
-                key={node.id}
-                className="absolute bg-neutral-950/90 border border-cyan-500/50 p-3 rounded-lg shadow-lg w-64 z-[140]"
-                style={{ left: node.x, top: node.y }}
-              >
-                <div className="text-[10px] font-bold text-cyan-300 mb-1 border-b border-cyan-900/50 pb-1">{node.data.type?.toUpperCase() || 'EXTRACTED NODE'}</div>
-                <div className="text-[9px] text-cyan-100 overflow-hidden break-words max-h-24 custom-scrollbar">
-                  {JSON.stringify(node.data, null, 2)}
-                </div>
+        {/* JARVIS HUD - Top Bar */}
+        <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-[200] pointer-events-none">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-6 h-6 text-cyan-400" />
+              <div>
+                <h1 className="text-sm font-bold tracking-widest text-cyan-400 uppercase">J.A.R.V.I.S.</h1>
+                <p className="text-[10px] text-cyan-600">RESEARCH ARENA</p>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
+            </div>
+            
+            {/* Voice Status Indicator */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neutral-900/80 border border-neutral-800 backdrop-blur-sm ${getVoiceStatusColor()}`}>
+              {voiceStatus === 'playing' && <div className="w-2 h-2 rounded-full bg-current animate-pulse" />}
+              <span className="text-[10px] font-bold uppercase">{getVoiceStatusText()}</span>
+            </div>
 
-      {/* Jarvis Node Inspector Overlay */}
-      {selectedNodeData && (
-        <div className="absolute bottom-10 right-10 w-96 bg-neutral-950/90 border border-cyan-500/50 p-4 rounded-xl backdrop-blur-md shadow-[0_0_30px_rgba(6,182,212,0.2)] pointer-events-auto z-[250]">
-          <div className="flex justify-between items-center mb-3 border-b border-cyan-900/50 pb-2">
-            <h3 className="text-sm font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-cyan-400" />
-              INSPECTOR: {selectedNodeData.type}
-            </h3>
-            <button onClick={() => setSelectedNodeData(null)} className="text-cyan-600 hover:text-cyan-300 transition-colors">
-              <X className="w-4 h-4" />
+            {/* Camera Status */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neutral-900/80 border border-neutral-800 backdrop-blur-sm ${isCameraActive ? 'text-emerald-400' : 'text-neutral-500'}`}>
+              <Monitor className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-bold uppercase">
+                {isCameraActive ? 'CAMERA ONLINE' : 'CAMERA OFFLINE'}
+              </span>
+            </div>
+
+            {/* Hand Tracking Status */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neutral-900/80 border border-neutral-800 backdrop-blur-sm ${handTrackingEnabled ? 'text-cyan-400' : 'text-neutral-500'}`}>
+              <Crosshair className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-bold uppercase">
+                {handTrackingEnabled ? 'HAND TRACKING ACTIVE' : 'HAND TRACKING DISABLED'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Gesture Display */}
+            <div className="bg-neutral-900/80 border border-neutral-800 px-3 py-1.5 rounded text-[10px] text-cyan-300 font-bold uppercase backdrop-blur-sm">
+              {gesture}
+            </div>
+
+            {/* Exit Button */}
+            <button
+              onClick={onExit}
+              className="pointer-events-auto px-4 py-2 bg-neutral-900/80 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 text-[10px] font-bold rounded-lg transition-all cursor-pointer backdrop-blur-sm"
+            >
+              EXIT [ESC]
             </button>
           </div>
-          <div className="text-xs text-cyan-200/80 space-y-2 overflow-y-auto max-h-60 custom-scrollbar">
-            <pre className="whitespace-pre-wrap font-mono text-[10px] leading-relaxed">
-              {JSON.stringify(selectedNodeData, null, 2)}
-            </pre>
+        </div>
+
+        {/* JARVIS Toolbar - Left */}
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-[200]">
+          <button 
+            onClick={() => setTool('pointer')} 
+            className={`p-2.5 rounded-lg border transition-all backdrop-blur-md ${tool === 'pointer' ? 'bg-cyan-900/60 border-cyan-600 text-cyan-300' : 'bg-neutral-900/80 border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-300'}`} 
+            title="Pointer Tool [1]"
+          >
+            <MousePointer2 className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={() => setTool('marker')} 
+            className={`p-2.5 rounded-lg border transition-all backdrop-blur-md ${tool === 'marker' ? 'bg-cyan-900/60 border-cyan-600 text-cyan-300' : 'bg-neutral-900/80 border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-300'}`} 
+            title="Marker Tool [2]"
+          >
+            <PenTool className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={() => setTool('eraser')} 
+            className={`p-2.5 rounded-lg border transition-all backdrop-blur-md ${tool === 'eraser' ? 'bg-cyan-900/60 border-cyan-600 text-cyan-300' : 'bg-neutral-900/80 border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-300'}`} 
+            title="Eraser Tool [3]"
+          >
+            <Eraser className="w-4 h-4" />
+          </button>
+          <div className="h-px bg-neutral-800 my-1 w-full" />
+          <button 
+            onClick={() => setHandTrackingEnabled(!handTrackingEnabled)} 
+            className={`p-2.5 rounded-lg border transition-all backdrop-blur-md ${handTrackingEnabled ? 'bg-cyan-900/60 border-cyan-600 text-cyan-300' : 'bg-neutral-900/80 border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-300'}`} 
+            title="Toggle Hand Tracking [M]"
+          >
+            {handTrackingEnabled ? <Crosshair className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
+          </button>
+          <button 
+            onClick={playJarvisGreeting} 
+            className={`p-2.5 rounded-lg border transition-all backdrop-blur-md ${voiceStatus === 'playing' ? 'bg-emerald-900/60 border-emerald-600 text-emerald-300' : 'bg-neutral-900/80 border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-300'}`} 
+            title="Test Voice [V]"
+          >
+            {voiceStatus === 'playing' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          </button>
+          <div className="h-px bg-neutral-800 my-1 w-full" />
+          <button 
+            onClick={() => setPanOffset({ x: 0, y: 0 })} 
+            className="p-2.5 rounded-lg bg-neutral-900/80 border border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-300 transition-all backdrop-blur-md" 
+            title="Reset Layout [R]"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={handleExport} 
+            className="p-2.5 rounded-lg bg-neutral-900/80 border border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-300 transition-all backdrop-blur-md" 
+            title="Export Snapshot"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Hidden Video for tracking */}
+        <video ref={videoRef} className="hidden" playsInline muted />
+
+        {/* Custom Hand Cursor */}
+        {isCameraActive && cursorPos.x >= 0 && (
+          <div
+            className="fixed pointer-events-none z-[300] transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-transform duration-200"
+            style={{ left: cursorPos.x, top: cursorPos.y }}
+          >
+            {tool === 'pointer' && <Crosshair className="w-5 h-5 text-cyan-400 opacity-70" />}
+            {tool === 'marker' && <PenTool className="w-4 h-4 text-cyan-400 fill-cyan-400/30" />}
+            {tool === 'eraser' && <div className="w-8 h-8 border-2 border-dashed border-rose-400/60 rounded-full bg-rose-500/10" />}
+          </div>
+        )}
+
+        {/* Fullscreen Research Graph */}
+        <div className="flex-1 w-full h-full flex p-4 pt-20 gap-4">
+          <div className="flex-1 h-full rounded-xl border border-neutral-800/50 overflow-hidden relative bg-neutral-950/90">
+            <ResearchGraph
+              state={state}
+              isStatic={false}
+              onSelectItem={useCallback((item: any) => {
+                setSelectedGraphItem(item);
+                setSelectedNodeData(item);
+                onSelectItem(item);
+              }, [onSelectItem])}
+            />
+            <div className="absolute top-3 left-3 text-[10px] text-neutral-500 bg-neutral-900/90 px-2 py-1 rounded font-mono">
+              LIVE RESEARCH GRAPH
+            </div>
+            <div className="absolute bottom-3 left-3 text-[10px] text-neutral-600 bg-neutral-900/90 px-2 py-1 rounded font-mono">
+              [F] Fit to Screen · Mouse fallback enabled
+            </div>
+          </div>
+
+          {/* Side Panel for Workspace */}
+          <div
+            className="w-80 h-full rounded-xl border border-neutral-800/50 bg-neutral-950/90 relative overflow-hidden"
+            style={{ cursor: tool === 'marker' ? 'crosshair' : tool === 'eraser' ? 'cell' : 'default' }}
+          >
+            <div className="absolute top-3 left-3 text-[10px] text-neutral-500 bg-neutral-900/90 px-2 py-1 rounded font-mono z-[160]">
+              WORKSPACE
+            </div>
+
+            <div
+              ref={containerRef}
+              className="absolute w-[300vw] h-[300vh] left-[-100vw] top-[-100vh] will-change-transform transition-transform duration-75"
+              style={{ transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }}
+            >
+              <canvas
+                ref={canvasRef}
+                className="absolute inset-0 pointer-events-none z-[150]"
+              />
+
+              {placedNodes.map(node => (
+                <div
+                  key={node.id}
+                  className="absolute bg-neutral-900/95 border border-neutral-700 p-3 rounded-lg shadow-lg w-64 z-[140] group"
+                  style={{ left: node.x, top: node.y }}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="text-[10px] font-bold text-cyan-400 border-b border-neutral-800 pb-1">
+                      {node.data.type?.toUpperCase() || 'NOTE'}
+                    </div>
+                    {node.isUserCreated && (
+                      <button
+                        onClick={() => handleDeleteUserNode(node.id)}
+                        className="text-neutral-500 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="text-[9px] text-neutral-300 overflow-hidden break-words max-h-32 custom-scrollbar">
+                    {typeof node.data === 'string' ? node.data : JSON.stringify(node.data, null, 2)}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      )}
-    </div>
+
+        {/* Inspector Overlay */}
+        {selectedNodeData && (
+          <div className="absolute bottom-4 right-4 w-80 bg-neutral-950/95 border border-neutral-800 p-4 rounded-xl backdrop-blur-md shadow-xl pointer-events-auto z-[250] transition-all duration-300">
+            <div className="flex justify-between items-center mb-3 border-b border-neutral-800 pb-2">
+              <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-2">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                INSPECTOR
+              </h3>
+              <button onClick={() => setSelectedNodeData(null)} className="text-neutral-500 hover:text-neutral-300 transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="text-[10px] text-neutral-300 space-y-2 overflow-y-auto max-h-48 custom-scrollbar">
+              <pre className="whitespace-pre-wrap font-mono leading-relaxed">
+                {JSON.stringify(selectedNodeData, null, 2)}
+              </pre>
+            </div>
+          </div>
+        )}
+      </div>
   );
 }

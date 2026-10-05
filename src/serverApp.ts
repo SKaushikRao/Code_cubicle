@@ -212,7 +212,7 @@ app.post('/api/voice/synthesize', async (req: Request, res: Response) => {
     }
 
     // Use multilingual model for Hindi, default for English
-    const modelId = language === 'hi' ? 'eleven_multilingual_v2' : 'eleven_monolingual_v1';
+    const modelId = language === 'hi' ? 'eleven_multilingual_v2' : 'eleven_v3';
     
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM`, {
       method: 'POST',
@@ -232,7 +232,9 @@ app.post('/api/voice/synthesize', async (req: Request, res: Response) => {
     });
 
     if (!response.ok) {
-      throw new Error(`ElevenLabs API error: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('[ElevenLabs API Error Details]:', errorText);
+      throw new Error(`ElevenLabs API error: ${response.statusText} - ${errorText}`);
     }
 
     const audioBuffer = await response.arrayBuffer();
